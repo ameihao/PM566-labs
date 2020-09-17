@@ -1,5 +1,5 @@
 ---
-title: "Lab 05 - Data Amei Hao"
+title: "Lab 05 - Data Wrangling Amei_Hao"
 output: html_document
 ---
 
@@ -249,9 +249,7 @@ Start by computing the states' average temperature. Use that measurement to clas
 - Mid: temp >= 20 and temp < 25
 - High: temp >= 25
 
-```{r}
 
-```
 
 Once you are done with that, you can compute the following:
 
@@ -263,9 +261,6 @@ Once you are done with that, you can compute the following:
 
 All by the levels described before.
 
-```{r}
-
-```
 
 Knit the document, commit your changes, and push them to GitHub. If you'd like, you can take this time to include the link of [the issue of the week](https://github.com/USCbiostats/PM566/issues/23) so that you let us know when you are done, e.g.,
 
