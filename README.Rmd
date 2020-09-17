@@ -1,5 +1,5 @@
 ---
-title: "Lab 05 - Data Wrangling Amei_Hao"
+title: "Lab 05 - Data Wrangling Amei_Hao "
 output: html_document
 ---
 
