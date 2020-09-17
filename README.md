@@ -1,5 +1,5 @@
 ---
-title: "Lab 05 - Data Wrangling"
+title: "Lab 05 - Data Amei Hao"
 output: html_document
 ---
 
@@ -83,40 +83,67 @@ Once you are done setting up the project, you can now start working with the MET
 ## Setup in R
 
 1. Load the `data.table` (and the `dtplyr` and `dplyr` packages if you plan to work with those).
+```{r setup, message=FALSE, echo=FALSE, warning=FALSE}
+library(data.table)
+library(dplyr)
+
+ met <- fread("https://raw.githubusercontent.com/USCbiostats/data-science-data/master/02_met/met_all.gz")
+```
 
 2. Load the met data from https://raw.githubusercontent.com/USCbiostats/data-science-data/master/02_met/met_all.gz, and also the station data. For the later, you can use the code we used during lecture to pre-process the stations data:
 
-```{r stations-data, eval = FALSE}
-# Download the data
-stations <- fread("ftp://ftp.ncdc.noaa.gov/pub/data/noaa/isd-history.csv")
-stations[, USAF := as.integer(USAF)]
+```{r stations-data, eval = TRUE,cache = TRUE}
+ # Download the data
+ stations <- fread("ftp://ftp.ncdc.noaa.gov/pub/data/noaa/isd-history.csv")
+ stations[, USAF := as.integer(USAF)]
 
-# Dealing with NAs and 999999
-stations[, USAF   := fifelse(USAF == 999999, NA_integer_, USAF)]
-stations[, CTRY   := fifelse(CTRY == "", NA_character_, CTRY)]
-stations[, STATE  := fifelse(STATE == "", NA_character_, STATE)]
+ # Dealing with NAs and 999999
+ stations[, USAF   := fifelse(USAF == 999999, NA_integer_, USAF)]
+ stations[, CTRY   := fifelse(CTRY == "", NA_character_, CTRY)]
+ stations[, STATE  := fifelse(STATE == "", NA_character_, STATE)]
 
-# Selecting the three relevant columns, and keeping unique records
-stations <- unique(stations[, list(USAF, CTRY, STATE)])
+ # Selecting the three relevant columns, and keeping unique records
+ stations <- unique(stations[, list(USAF, CTRY, STATE)])
 
-# Dropping NAs
-stations <- stations[!is.na(USAF)]
+ # Dropping NAs
+ stations <- stations[!is.na(USAF)]
 
-# Removing duplicates
-stations[, n := 1:.N, by = .(USAF)]
-stations <- stations[n == 1,][, n := NULL]
+ # Removing duplicates
+ stations[, n := 1:.N, by = .(USAF)]
+ stations <- stations[n == 1,][, n := NULL]
 ```
+ 
 
 3. Merge the data as we did during the lecture.
+```{r}
+met = merge(
+   x = met, y = stations, 
+   by.x = "USAFID", by.y = "USAF",
+   all.x = TRUE, all.y = FALSE
+   )
 
+ met[1:5, .(USAFID,WBAN,STATE)]
+```
 ## Question 1: Representative station for the US
 
 What is the median station in terms of temperature, wind speed, and atmospheric pressure? Look for the three weather stations that best represent continental US using the `quantile()` function. Do these three coincide?
 
 ```{r}
+met_stations = met [, .(
+      wind.sp = mean(wind.sp,na.rm = TRUE),
+    atm.press = mean(atm.press, na.rm = TRUE),
+     temp     =  mean(temp, na.rm =  TRUE)
+ ), by = USAFID]
 
+ met_stations[, temp50 := quantile(temp,probs = .5, na.rm = TRUE)]
+ met_stations[, atmp50 := quantile(atm.press,probs = .5, na.rm = TRUE)]
+ met_stations[, windsp50 := quantile(wind.sp,probs = .5, na.rm = TRUE)]
+
+ met_stations[which.min(abs(temp - temp50))]
+ met_stations[which.min(abs(atm.press - atmp50))]
+ met_stations[which.min(abs(wind.sp - windsp50))]
 ```
-
+No, these three do not coincide.
 
 Knit the document, commit your changes, and Save it on GitHub. Don't forget to add `README.md` to the tree, the first time you render it.
 
@@ -125,6 +152,31 @@ Knit the document, commit your changes, and Save it on GitHub. Don't forget to a
 Just like the previous question, you are asked to identify what is the most representative, the median, station per state. This time, instead of looking at one variable at a time, look at the euclidean distance. If multiple stations show in the median, select the one located at the lowest latitude.
 
 ```{r}
+met_stations = met [, .(
+      wind.sp = mean(wind.sp,na.rm = TRUE),
+    atm.press = mean(atm.press, na.rm = TRUE),
+     temp     =  mean(temp, na.rm =  TRUE)
+ ), by = .(USAFID, STATE)]
+
+ # calculate the median by state
+ met_stations[, temp50s := quantile(temp,probs = .5, na.rm = TRUE), by = STATE]
+ met_stations[, atmp50s := quantile(atm.press,probs = .5, na.rm = TRUE),  by = STATE]
+ met_stations[, windsp50s := quantile(wind.sp,probs = .5, na.rm = TRUE),  by = STATE]
+
+ #temperature
+ met_stations[, tempdif  := which.min(abs(temp - temp50s)), by=STATE]
+ met_stations[, recordid := 1:.N, by = STATE]
+ met_temp = met_stations[recordid == tempdif, .(USAFID, temp, temp50s, STATE)]
+ met_temp
+
+ #ATM press
+ met_stations[, tempdif  := which.min(abs(atm.press - atmp50s)), by=STATE]
+ met_stations[recordid == tempdif, .(USAFID, atm.press, atmp50s, STATE)]
+
+ #wind speed
+ met_stations[, tempdif  := which.min(abs(wind.sp - windsp50s)), by=STATE]
+ met_stations[recordid == tempdif, .(USAFID, wind.sp, windsp50s, STATE)]
+
 
 ```
 
@@ -135,6 +187,53 @@ Knit the doc and save it on GitHub.
 For each state, identify what is the station that is closest to the mid-point of the state. Combining these with the stations you identified in the previous question, use `leaflet()` to visualize all ~100 points in the same figure, applying different colors for those identified in this question.
 
 ```{r}
+met_stations = unique(met[, .(USAFID, STATE, lon, lat)])
+
+ met_stations[, n := 1:.N, by=USAFID]
+ met_stations <- met_stations[n == 1]
+
+ # a short cut using the .SD keyword
+ # met_stations[, .SD[1], by=USAFID]
+
+ met_stations[, lat_mid := quantile(lat, probs = .5, na.rm = TRUE), by=STATE]
+ met_stations[, lon_mid := quantile(lon, probs = .5, na.rm = TRUE), by=STATE]
+
+
+ # Looking at the euclidean distances
+ met_stations[, dist := sqrt((lat-lat_mid)^2+(lon-lon_mid)^2)]
+ met_stations[, minrecord := which.min(dist), by=STATE]
+ met_stations[, n := 1:.N, by=STATE]
+ met_location = met_stations[n == minrecord, .(USAFID, STATE, lon, lat)]
+ met_location
+ 
+ all_stations = met[, .(USAFID, lat, lon, STATE)][, .SD[1], by = "USAFID"]
+
+ # Recovering lon and lat from the original dataset
+ met_temp <- merge(
+   x = met_temp,
+   y = all_stations,
+   by = "USAFID",
+   all.x = TRUE, all.y = FALSE
+ )
+ 
+ library(leaflet)
+
+ #combine the datasets
+ dat1 = met_location[, .(lon, lat)]
+ dat1[, type := "Center of the state"]
+
+ dat2 = met_temp[, .(lon, lat)]
+ dat2[, type := "Center of the temperature"]
+
+ dat = rbind(dat1,dat2)
+
+ # drewing the map
+ rh_pal <- colorFactor(c('blue', 'purple', 'red'),
+                        domain = as.factor(dat$type))
+ leaflet(dat) %>%
+   addProviderTiles("OpenStreetMap") %>%
+   addCircles(lng = ~lon, lat = ~lat, color=~rh_pal(type), opacity=1,fillOpacity=1, radius=500)
+
 
 ```
 
